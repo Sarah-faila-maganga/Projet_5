@@ -1,138 +1,189 @@
 package menus;
 
-import java.util.Scanner;
 import models.User;
 import models.Transaction;
 import services.UserService;
 import services.TransactionService;
 
-public class AirtelMenu {
+import java.util.List;
+import java.util.Scanner;
+import java.util.UUID;
 
-    private UserService userService = new UserService();
-    private TransactionService transactionService = new TransactionService();
+/**
+ * Menu console principal (Vodacom/M-PESA style)
+ */
+public class VodacomMenu {
 
-    public void afficherMenu() {
-        Scanner sc = new Scanner(System.in);
+    private final UserService userService;
+    private final TransactionService transactionService;
+    private final Scanner sc = new Scanner(System.in);
 
-        System.out.println("=== VODACASH (VODACOM) ===");
-        System.out.println("1. Créer utilisateur");
-        System.out.println("2. Déposer argent");
-        System.out.println("3. Retirer argent");
-        System.out.println("4. Transférer argent");
-        System.out.println("5. Liste utilisateurs");
-        System.out.println("6. Liste transactions");
-        System.out.print("Choix : ");
+    public VodacomMenu() {
+        this.userService = new UserService();
+        this.transactionService = new TransactionService();
+    }
 
-        int choix = sc.nextInt();
-        sc.nextLine();
+    public void start() {
+        boolean running = true;
+        while (running) {
+            System.out.println("\n=== VODACASH (VODACOM) ===");
+            System.out.println("1. Créer utilisateur");
+            System.out.println("2. Déposer");
+            System.out.println("3. Retirer");
+            System.out.println("4. Transférer");
+            System.out.println("5. Lister utilisateurs");
+            System.out.println("6. Lister transactions");
+            System.out.println("7. Modifier utilisateur");
+            System.out.println("8. Supprimer utilisateur");
+            System.out.println("0. Quitter");
+            System.out.print("Choix: ");
 
-        switch (choix) {
-            case 1 -> creerUser(sc);
-            case 2 -> depot(sc);
-            case 3 -> retrait(sc);
-            case 4 -> transfert(sc);
-            case 5 -> afficherUsers();
-            case 6 -> afficherTransactions();
-            default -> System.out.println("Choix invalide !");
+            String line = sc.nextLine();
+            switch (line) {
+                case "1" -> createUser();
+                case "2" -> deposit();
+                case "3" -> withdraw();
+                case "4" -> transfer();
+                case "5" -> listUsers();
+                case "6" -> listTransactions();
+                case "7" -> updateUser();
+                case "8" -> deleteUser();
+                case "0" -> {
+                    System.out.println("Au revoir !");
+                    running = false;
+                }
+                default -> System.out.println("Choix invalide.");
+            }
         }
     }
 
-    private void creerUser(Scanner sc) {
-        System.out.print("ID : ");
-        String id = sc.nextLine();
-        System.out.print("Nom : ");
+    private void createUser() {
+        System.out.print("ID utilisateur: ");
+        String id = sc.nextLine().trim();
+        if (id.isEmpty()) id = UUID.randomUUID().toString();
+
+        System.out.print("Nom: ");
         String nom = sc.nextLine();
-        System.out.print("Téléphone : ");
+
+        System.out.print("Téléphone: ");
         String tel = sc.nextLine();
 
-        User user = new User(id, nom, tel, 0);
-        userService.create(user);
-        System.out.println("Utilisateur créé !");
+        User u = new User(id, nom, tel, 0.0);
+        userService.create(u);
+        System.out.println("Utilisateur créé: " + u);
     }
 
-    private void depot(Scanner sc) {
-        System.out.print("Téléphone : ");
+    private void deposit() {
+        System.out.print("Téléphone: ");
         String tel = sc.nextLine();
 
-        User user = userService.getByPhone(tel);
-        if (user == null) {
-            System.out.println("Utilisateur introuvable !");
-            return;
-        }
+        User u = userService.getByPhone(tel);
+        if (u == null) { System.out.println("Utilisateur introuvable."); return; }
 
-        System.out.print("Montant : ");
-        double montant = sc.nextDouble();
+        System.out.print("Montant: ");
+        double m = readDouble();
+        u.setSolde(u.getSolde() + m);
+        userService.update(u.getId(), u);
 
-        user.setSolde(user.getSolde() + montant);
-        transactionService.create(new Transaction("T" + Math.random(), "depot", montant));
-
-        System.out.println("Dépôt réussi !");
+        Transaction t = new Transaction("T-"+UUID.randomUUID(), "depot", m, null, tel);
+        transactionService.create(t);
+        System.out.println("Dépôt effectué.");
     }
 
-    private void retrait(Scanner sc) {
-        System.out.print("Téléphone : ");
+    private void withdraw() {
+        System.out.print("Téléphone: ");
         String tel = sc.nextLine();
 
-        User user = userService.getByPhone(tel);
-        if (user == null) {
-            System.out.println("Utilisateur introuvable !");
-            return;
-        }
+        User u = userService.getByPhone(tel);
+        if (u == null) { System.out.println("Utilisateur introuvable."); return; }
 
-        System.out.print("Montant : ");
-        double montant = sc.nextDouble();
+        System.out.print("Montant: ");
+        double m = readDouble();
+        if (u.getSolde() < m) { System.out.println("Solde insuffisant."); return; }
 
-        if (user.getSolde() < montant) {
-            System.out.println("Solde insuffisant !");
-            return;
-        }
+        u.setSolde(u.getSolde() - m);
+        userService.update(u.getId(), u);
 
-        user.setSolde(user.getSolde() - montant);
-        transactionService.create(new Transaction("T" + Math.random(), "retrait", montant));
-
-        System.out.println("Retrait réussi !");
+        Transaction t = new Transaction("T-"+UUID.randomUUID(), "retrait", m, tel, null);
+        transactionService.create(t);
+        System.out.println("Retrait effectué.");
     }
 
-    private void transfert(Scanner sc) {
-        System.out.print("Votre téléphone : ");
-        String tel1 = sc.nextLine();
-        System.out.print("Téléphone destinataire : ");
-        String tel2 = sc.nextLine();
+    private void transfer() {
+        System.out.print("Votre téléphone: ");
+        String from = sc.nextLine();
+        System.out.print("Téléphone destinataire: ");
+        String to = sc.nextLine();
 
-        User u1 = userService.getByPhone(tel1);
-        User u2 = userService.getByPhone(tel2);
+        User uFrom = userService.getByPhone(from);
+        User uTo = userService.getByPhone(to);
 
-        if (u1 == null || u2 == null) {
-            System.out.println("Utilisateur introuvable !");
-            return;
-        }
+        if (uFrom == null || uTo == null) { System.out.println("Expéditeur ou destinataire introuvable."); return; }
 
-        System.out.print("Montant : ");
-        double montant = sc.nextDouble();
+        System.out.print("Montant: ");
+        double m = readDouble();
+        if (uFrom.getSolde() < m) { System.out.println("Solde insuffisant."); return; }
 
-        if (u1.getSolde() < montant) {
-            System.out.println("Solde insuffisant !");
-            return;
-        }
+        uFrom.setSolde(uFrom.getSolde() - m);
+        uTo.setSolde(uTo.getSolde() + m);
+        userService.update(uFrom.getId(), uFrom);
+        userService.update(uTo.getId(), uTo);
 
-        u1.setSolde(u1.getSolde() - montant);
-        u2.setSolde(u2.getSolde() + montant);
-
-        transactionService.create(new Transaction("T" + Math.random(), "transfert", montant));
-
-        System.out.println("Transfert réussi !");
+        Transaction t = new Transaction("T-"+UUID.randomUUID(), "transfert", m, from, to);
+        transactionService.create(t);
+        System.out.println("Transfert effectué.");
     }
 
-    private void afficherUsers() {
-        for (User u : userService.read()) {
-            System.out.println(u);
-        }
+    private void listUsers() {
+        List<User> users = userService.read();
+        if (users.isEmpty()) System.out.println("Aucun utilisateur.");
+        else users.forEach(System.out::println);
     }
 
-    private void afficherTransactions() {
-        for (Transaction t : transactionService.read()) {
-            System.out.println(t);
+    private void listTransactions() {
+        List<Transaction> txs = transactionService.read();
+        if (txs.isEmpty()) System.out.println("Aucune transaction.");
+        else txs.forEach(System.out::println);
+    }
+
+    private void updateUser() {
+        System.out.print("ID utilisateur à modifier: ");
+        String id = sc.nextLine();
+        User u = userService.getById(id);
+        if (u == null) { System.out.println("Utilisateur introuvable."); return; }
+        System.out.print("Nouveau nom (" + u.getNom() + "): ");
+        String nom = sc.nextLine();
+        if (!nom.isEmpty()) u.setNom(nom);
+        System.out.print("Nouveau téléphone (" + u.getTelephone() + "): ");
+        String tel = sc.nextLine();
+        if (!tel.isEmpty()) u.setTelephone(tel);
+        System.out.print("Nouveau solde (" + u.getSolde() + "): ");
+        String s = sc.nextLine();
+        if (!s.isEmpty()) {
+            try { u.setSolde(Double.parseDouble(s)); } catch (NumberFormatException e) { System.out.println("Valeur solde invalide."); }
+        }
+        userService.update(id, u);
+        System.out.println("Utilisateur mis à jour.");
+    }
+
+    private void deleteUser() {
+        System.out.print("ID utilisateur à supprimer: ");
+        String id = sc.nextLine();
+        userService.delete(id);
+        System.out.println("Si l'utilisateur existait, il est supprimé.");
+    }
+
+    private double readDouble() {
+        while (true) {
+            String s = sc.nextLine().trim();
+            try {
+                return Double.parseDouble(s);
+            } catch (NumberFormatException e) {
+                System.out.print("Montant invalide, réessaye: ");
+            }
         }
     }
 }
+
+
 
